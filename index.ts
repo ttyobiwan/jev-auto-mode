@@ -117,7 +117,7 @@ async function recordAudit(deps: EvaluationContext, event: PermissionEvaluation,
 
 export default Plugin.define({
 	// Retain the storage namespace for saved session modes and decision records.
-	id: "jev-arbiter",
+	id: "jev-auto-mode",
 	async setup(ctx) {
 		const log = (message: string) => console.warn(message);
 		const modes = createModeController({ getSession: ctx.session.get, storage: ctx.storage });

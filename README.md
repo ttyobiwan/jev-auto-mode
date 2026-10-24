@@ -91,8 +91,7 @@ user requests, compaction summary, recent calls, and stated intent to TypeSafe.
 
 The plugin records decisions under `decision/` in plugin storage, including context,
 environment, answers, model, reason, and latency. Audit writes are best-effort;
-records are not pruned automatically. The server retains the `jev-arbiter` ID to
-preserve existing session modes and audit records. The remote/system criterion
+records are not pruned automatically. The remote/system criterion
 retains its `irreversible_external_effect` identifier in audit records.
 
 ### Context and task authority
