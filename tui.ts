@@ -1,5 +1,6 @@
 import { Plugin } from "@opencode/plugin/tui";
-import { createEffect, createSignal, onCleanup, Show } from "solid-js";
+import { createElement, insert, setProp } from "@opentui/solid";
+import { createComponent, createEffect, createSignal, onCleanup, Show } from "solid-js";
 import { createIndicator } from "./indicator.js";
 import type { AutoMode } from "./mode.js";
 import { AutoModeRpc } from "./rpc.js";
@@ -39,7 +40,16 @@ export default Plugin.define({
 				const reconnect = context.data.on("server.connected", () => { void indicator.refresh(); });
 				createEffect(() => { void indicator.select(props.sessionID); });
 				onCleanup(() => { indicator.dispose(); unsubscribe(); reconnect(); });
-				return <Show when={enabled()}><text fg={context.theme.text.muted}>auto mode on</text></Show>;
+				return createComponent(Show, {
+					keyed: true,
+					get when() { return enabled(); },
+					get children() {
+						const text = createElement("text");
+						insert(text, "auto mode on");
+						createEffect(() => setProp(text, "fg", context.theme.text.muted));
+						return text;
+					},
+				});
 			},
 		});
 	},

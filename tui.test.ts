@@ -1,8 +1,34 @@
 import "@opentui/solid/preload";
 import { expect, test } from "bun:test";
+import { copyFile, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { JSX } from "@opentui/solid";
 import type { Plugin } from "@opencode/plugin/tui";
 import type { KeymapLayer, SlotMap } from "@opencode/plugin/tui/context";
+
+test("the TUI entrypoint loads from an installed package under node_modules", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "jev-auto-mode-"));
+	try {
+		const installed = join(directory, "node_modules", "jev-auto-mode");
+		await mkdir(installed, { recursive: true });
+		for (const file of ["package.json", "tui.ts", "indicator.ts", "rpc.ts"]) {
+			await copyFile(join(import.meta.dir, file), join(installed, file));
+		}
+		await symlink(join(import.meta.dir, "node_modules"), join(installed, "node_modules"));
+		const entry = pathToFileURL(join(installed, "tui.ts")).href;
+		const process = Bun.spawn([Bun.which("bun")!, "--preload", import.meta.resolve("@opentui/solid/preload"), "-e", `await import(${JSON.stringify(entry)})`], {
+			cwd: directory,
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		const error = await new Response(process.stderr).text();
+		expect(await process.exited, error).toBe(0);
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
 
 test("Shift+Tab and the palette toggle auto mode beside the prompt", async () => {
 	const { default: plugin } = await import("./tui.js");

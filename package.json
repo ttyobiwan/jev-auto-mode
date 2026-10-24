@@ -10,7 +10,7 @@
 	"type": "module",
 	"exports": {
 		".": "./index.ts",
-		"./tui": "./tui.tsx"
+		"./tui": "./tui.ts"
 	},
 	"scripts": {
 		"test": "bun test",
