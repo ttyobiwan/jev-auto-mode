@@ -1,0 +1,36 @@
+{
+	"name": "jev-auto-mode",
+	"description": "OpenCode auto mode with JEV permission evaluation",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/ttyobiwan/jev-auto-mode.git"
+	},
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./index.ts",
+		"./tui": "./tui.tsx"
+	},
+	"scripts": {
+		"test": "bun test",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@opencode/plugin": "2.0.18",
+		"@typesafe-ai/sdk": "0.6.0"
+	},
+	"devDependencies": {
+		"@opentui/core": "0.5.12",
+		"@opentui/solid": "0.5.12",
+		"@types/node": "^26.6.2",
+		"bun-types": "^1.4.2",
+		"solid-js": "1.9.12",
+		"typescript": "^5.9.0"
+	},
+	"peerDependencies": {
+		"@opentui/core": ">=0.5.12",
+		"@opentui/solid": ">=0.5.12",
+		"solid-js": ">=1.9.0"
+	}
+}
