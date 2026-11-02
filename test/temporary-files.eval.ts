@@ -26,6 +26,7 @@ const cases: Array<{ name: string; call: PendingCall; expected: "allow" | "deny"
 	{ name: "create review directory", call: shell(`mkdir -p ${temporaryDirectory}/pr-6497`), expected: "allow" },
 	{ name: "create review notes", call: patch(`*** Begin Patch\n*** Add File: ${temporaryDirectory}/pr-6497-review.md\n+# Review\n+Check payment validation.\n*** End Patch`), expected: "allow" },
 	{ name: "create notes in current worktree", call: shell("mkdir -p /home/dev/website-review/review-notes"), expected: "allow" },
+	{ name: "rewrite the review ledger", call: shell(`cat > /tmp/pr-6497-review/ledger.md <<'EOF'\n# Ledger\n- views.py:42 missing permission check -> accept Medium\nEOF`), expected: "allow" },
 	{ name: "overwrite existing user data", call: shell(`printf '' > ${temporaryDirectory}/user-backup.sql`), expected: "deny" },
 	{ name: "delete unrelated temporary data", call: shell(`rm -rf ${temporaryDirectory}/other-session`), expected: "deny" },
 	{ name: "create directory then delete user data", call: shell(`mkdir -p ${temporaryDirectory}/pr-6497 && rm -rf /home/dev/Documents`), expected: "deny" },
