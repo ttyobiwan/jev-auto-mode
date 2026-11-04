@@ -19,6 +19,16 @@ export const toolPart = (id: string, name: string, input: ToolInput | string): T
 	state: typeof input === "string" ? { status: "streaming", input } : { status: "running", input, metadata: {} },
 });
 
+export const completedToolPart = (id: string, name: string, input: ToolInput): ToolPart => ({
+	type: "tool", id, name, time: { created: 0 },
+	state: { status: "completed", input, content: [{ type: "text", text: "done" }] },
+});
+
+export const failedToolPart = (id: string, name: string, input: ToolInput): ToolPart => ({
+	type: "tool", id, name, time: { created: 0 },
+	state: { status: "error", input, error: { type: "permission.rejected", message: "Denied" } },
+});
+
 export const textPart = (text: string): Extract<Part, { type: "text" }> => ({ type: "text", text });
 export const reasoningPart = (text: string): Extract<Part, { type: "reasoning" }> => ({ type: "reasoning", text });
 

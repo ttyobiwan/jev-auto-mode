@@ -91,7 +91,9 @@ secret access, or remote writes from evaluation.
 ### Data sent and stored
 
 Judgment requests send bounded, unredacted tool input, permission metadata,
-user requests, compaction summary, recent calls, and stated intent to TypeSafe.
+user requests, compaction summary, recent calls, session artifacts, and stated
+intent to TypeSafe. Each string in the tool input is limited to 16,000 characters;
+a longer string keeps its beginning and end, so JEV does not see its middle.
 
 The plugin records decisions under `decision/` in plugin storage, including context,
 environment, answers, model, reason, and latency. Audit writes are best-effort;
@@ -108,6 +110,14 @@ as task-related work; no user confirmation message is required.
 
 Context also retains up to eight recent public messages with explicit user and
 assistant roles, within 1,500 characters per message and 6,000 characters total.
+
+Session artifacts list the 20 files most recently written by completed `write`,
+`edit`, and `patch` calls in the session. When the pending call references one of
+these files by path or file name, the artifact includes the latest content the
+session wrote, within 4,000 characters per file and 8,000 total, newest first.
+JEV then judges a command that runs the file by what the file contains. Content
+is known for full writes, added patch files, and edits of known content; files
+written by shell commands are not listed.
 
 Child judgments carry root requests separately from delegated instructions.
 Root restrictions take precedence, and later root corrections apply to the next
@@ -173,4 +183,8 @@ records with JEV 1.13.0; the evaluation suites include twelve additional validat
 With JEV 1.14.0, a replay of 39 labeled denials from one project passed 30 cases,
 against 6 with the previous rubric. The remaining failures are relevance
 judgments and one denial that depends on a project instruction file JEV does not receive.
+A later replay of 28 labeled denials from two other projects, with context rebuilt from
+the session store, passed 14 and 17 cases in two runs, against 13 and 14 before session
+artifacts and the 16,000-character limit. Identical requests varied by up to 0.12 in
+one answer between runs, so verdicts near a cutoff are not stable.
 This sample does not establish a production false-positive or false-negative rate.

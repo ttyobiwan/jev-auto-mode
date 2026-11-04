@@ -4,7 +4,7 @@ import { CRITERION_IDS } from "./rubric.js";
 import { taskContext, type TaskContext } from "./task-context.js";
 import { withCircuitBreaker } from "./circuit-breaker.js";
 import { assistant, textPart, toolPart, user } from "../test/fixtures.js";
-import { bounded, createJevJudge, jevJudgeFromEnvironment, type JudgeEnvironment, type PendingCall, type SystemOneClient } from "./judge.js";
+import { bounded, CALL_STRING_LIMIT, createJevJudge, jevJudgeFromEnvironment, type JudgeEnvironment, type PendingCall, type SystemOneClient } from "./judge.js";
 
 const CALL: PendingCall = {
 	action: "shell",
@@ -131,6 +131,15 @@ describe("JEV judge", () => {
 		expect(state.task).toEqual({ requests: ["Fix the permission denial."] });
 	});
 
+	test("forwards session artifacts only when the session wrote a file", async () => {
+		const captures: unknown[] = [];
+		const judge = createJevJudge(capturingClient(captures), ENVIRONMENT);
+		await judge.judge(CALL, { ...TASK, artifacts: [{ path: "/tmp/seed.py", content: "seed()" }] });
+		await judge.judge(CALL, { ...TASK, artifacts: [] });
+		expect((captures[0] as CapturedRequest).state.artifacts).toEqual([{ path: "/tmp/seed.py", content: "seed()" }]);
+		expect((captures[1] as CapturedRequest).state).not.toHaveProperty("artifacts");
+	});
+
 	test("sends root authority separately from the delegated task", async () => {
 		const captures: unknown[] = [];
 		const context = taskContext([user("Check service status.")], "pending", [user("Use the service account, but do not deploy.")]);
@@ -221,11 +230,12 @@ describe("JEV judge", () => {
 
 		test("long strings in the call are truncated", async () => {
 		const captures: unknown[] = [];
-		const content = "x".repeat(5000);
+		const content = "x".repeat(CALL_STRING_LIMIT + 1000);
 		await createJevJudge(capturingClient(captures), ENVIRONMENT).judge({ ...CALL, tool: { name: "write", input: { filePath: "a.ts", content } } }, TASK);
 		const call = (captures[0] as CapturedRequest).state.call as { tool: { input: { filePath: string; content: string } } };
 		expect(call.tool.input.filePath).toBe("a.ts");
-		expect(call.tool.input.content).toBe(`${"x".repeat(2000)}…[1000 characters truncated]…${"x".repeat(2000)}`);
+		const half = "x".repeat(CALL_STRING_LIMIT / 2);
+		expect(call.tool.input.content).toBe(`${half}…[1000 characters truncated]…${half}`);
 	});
 
 	test("the versioned model id JEV answered with is carried in the judgment", async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { PermissionEvaluation } from "@opencode/plugin/promise/permission";
 import type { SessionMessage, TaskContext } from "./jev/task-context.js";
-import type { Judge, JudgeEnvironment, PendingCall } from "./jev/judge.js";
+import { CALL_STRING_LIMIT, type Judge, type JudgeEnvironment, type PendingCall } from "./jev/judge.js";
 import { decide, type Answers, type Judgment } from "./jev/decide.js";
 import { evaluatePermission, type EvaluationContext } from "./index.js";
 import { createModeController, type ModeController } from "./mode.js";
@@ -345,13 +345,14 @@ describe("evaluatePermission", () => {
 	});
 
 	test("the audit bounds long strings in the call", async () => {
-		const content = "x".repeat(5000);
+		const content = "x".repeat(CALL_STRING_LIMIT + 1000);
 		const h = harness({
 			judge: { judge: async () => ({ verdict: "allow", reason: "Auto-approved by JEV", answers: ANSWERS }) },
 		});
 		await h.evaluate(event({ metadata: { diff: content } }));
 		const call = (h.audit[0].value as { call: { metadata: { diff: string } } }).call;
-		expect(call.metadata.diff).toBe(`${"x".repeat(2000)}…[1000 characters truncated]…${"x".repeat(2000)}`);
+		const half = "x".repeat(CALL_STRING_LIMIT / 2);
+		expect(call.metadata.diff).toBe(`${half}…[1000 characters truncated]…${half}`);
 	});
 
 	test("a storage failure is logged and discarded, the decision still applies", async () => {

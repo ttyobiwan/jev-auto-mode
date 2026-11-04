@@ -7,8 +7,8 @@ import type { TaskContext } from "./task-context.js";
 export const JUDGE_TIMEOUT_MS = 2_500;
 /** Retries after the first attempt; bounds an unanswered ask at ~5.5 s. */
 export const JUDGE_MAX_RETRIES = 1;
-/** Characters per string in the forwarded call; bounds a write's content or an edit's diff. */
-export const CALL_STRING_LIMIT = 4000;
+/** Characters per string in the forwarded call; bounds a write's content or an edit's diff. Truncation hides the middle of a long script from JEV. */
+export const CALL_STRING_LIMIT = 16_000;
 const NO_REQUEST = "(unknown: the session holds no user request)";
 
 /** The call the arbiter forwards from a PermissionEvaluation event. */
@@ -61,6 +61,7 @@ export function createJevJudge(client: SystemOneClient, defaultEnvironment: Judg
 					temporaryDirectories: environment.temporaryDirectories ?? [],
 				},
 				recentCalls: context.recentCalls,
+				...(context.artifacts?.length ? { artifacts: context.artifacts } : {}),
 			};
 			try {
 				const { model, answers } = await client.systemOne(

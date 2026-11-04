@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { taskContext, toolCall, type SessionMessage } from "./task-context.js";
-import { assistant, compaction, reasoningPart, textPart, toolPart, user } from "../test/fixtures.js";
+import { assistant, compaction, completedToolPart, failedToolPart, reasoningPart, textPart, toolPart, user } from "../test/fixtures.js";
 
 describe("taskContext", () => {
 	test("combines ordered requests, summary, issuing intent, and recent calls", () => {
@@ -236,6 +236,73 @@ describe("taskContext", () => {
 		expect(taskContext(messages, "").intent).toBe("latest");
 		messages.push(assistant(reasoningPart("thinking"), toolPart("pending", "shell", { command: "ls" })));
 		expect(taskContext(messages, "pending").intent).toBeUndefined();
+	});
+
+	test("lists files that completed calls wrote, with content only for files the pending call references", () => {
+		const messages = [assistant(
+			completedToolPart("a", "write", { path: "/tmp/review/seed.py", content: "Venue.objects.create(name='Rebet')" }),
+			completedToolPart("b", "write", { path: "/tmp/review/notes.md", content: "# Notes" }),
+			failedToolPart("c", "write", { path: "/tmp/review/denied.py", content: "drop()" }),
+			toolPart("d", "write", { path: "/tmp/review/running.py", content: "pending()" }),
+			toolPart("pending", "shell", { command: "cd ../website && uv run python manage.py shell < /tmp/review/seed.py" }),
+		)];
+		expect(taskContext(messages, "pending").artifacts).toEqual([
+			{ path: "/tmp/review/seed.py", content: "Venue.objects.create(name='Rebet')" },
+			{ path: "/tmp/review/notes.md" },
+		]);
+	});
+
+	test("matches a referenced file by name after a change of directory, but not a longer name", () => {
+		const write = completedToolPart("a", "write", { path: "/tmp/review/seed.py", content: "seed()" });
+		const run = (command: string) => taskContext([assistant(write, toolPart("pending", "shell", { command }))], "pending").artifacts;
+		expect(run("cd /tmp/review && python3 seed.py")).toEqual([{ path: "/tmp/review/seed.py", content: "seed()" }]);
+		expect(run("python3 reseed.py")).toEqual([{ path: "/tmp/review/seed.py" }]);
+	});
+
+	test("follows edits of known content and drops content after an edit of unknown content", () => {
+		const messages = [assistant(
+			completedToolPart("a", "write", { path: "/tmp/a.py", content: "delete(); delete()" }),
+			completedToolPart("b", "edit", { path: "/tmp/a.py", oldString: "delete()", newString: "create()", replaceAll: true }),
+			completedToolPart("c", "edit", { path: "/tmp/b.py", oldString: "x", newString: "y" }),
+			toolPart("pending", "shell", { command: "python3 /tmp/a.py /tmp/b.py" }),
+		)];
+		expect(taskContext(messages, "pending").artifacts).toEqual([
+			{ path: "/tmp/a.py", content: "create(); create()" },
+			{ path: "/tmp/b.py" },
+		]);
+	});
+
+	test("reads added, updated, moved, and deleted files from a patch", () => {
+		const patchText = [
+			"*** Begin Patch",
+			"*** Add File: /tmp/new.sh", "+echo one", "+echo two",
+			"*** Update File: src/old.ts", "*** Move to: src/renamed.ts", "@@", "-a", "+b",
+			"*** Delete File: src/gone.ts",
+			"*** End Patch",
+		].join("\n");
+		const messages = [assistant(
+			completedToolPart("a", "write", { path: "src/gone.ts", content: "gone" }),
+			completedToolPart("b", "patch", { patchText }),
+			toolPart("pending", "shell", { command: "sh /tmp/new.sh" }),
+		)];
+		expect(taskContext(messages, "pending").artifacts).toEqual([
+			{ path: "/tmp/new.sh", content: "echo one\necho two" },
+			{ path: "src/renamed.ts" },
+		]);
+	});
+
+	test("keeps the twenty latest written files and bounds content newest first", () => {
+		const writes = Array.from({ length: 25 }, (_, index) => completedToolPart(`w-${index}`, "write", { path: `/tmp/f${index}.txt`, content: "x".repeat(5000) }));
+		const pending = toolPart("pending", "shell", { command: Array.from({ length: 25 }, (_, index) => `cat /tmp/f${index}.txt`).join("; ") });
+		const artifacts = taskContext([assistant(...writes, pending)], "pending").artifacts ?? [];
+		expect(artifacts).toHaveLength(20);
+		expect(artifacts[0].path).toBe("/tmp/f5.txt");
+		expect(artifacts.filter((artifact) => artifact.content).map((artifact) => artifact.path)).toEqual(["/tmp/f23.txt", "/tmp/f24.txt"]);
+		expect(artifacts.every((artifact) => (artifact.content?.length ?? 0) <= 4000)).toBe(true);
+	});
+
+	test("omits artifacts when the session wrote no file", () => {
+		expect(taskContext([assistant(completedToolPart("a", "read", { path: "/etc/hosts" }), toolPart("pending", "shell", { command: "ls" }))], "pending")).not.toHaveProperty("artifacts");
 	});
 
 	test("joins text parts without forwarding reasoning", () => {
