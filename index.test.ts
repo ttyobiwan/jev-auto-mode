@@ -386,19 +386,17 @@ describe("evaluatePermission", () => {
 		expect((h.audit[0].value as { verdict: string }).verdict).toBe("abstain");
 	});
 
-	test("repeated uncertain asks receive the same guidance and remain denied", async () => {
-		const uncertain: Answers = { ...ANSWERS, destroys_data: 0.5 };
-		const h = harness({
-			judge: { judge: async () => decide(uncertain) },
-		});
-		const first = event();
-		await h.evaluate(first);
-		const second = event({ source: { type: "tool", messageID: "msg-2", id: "call-2" } });
-		await h.evaluate(second);
-		expect(first.effect).toBe("deny");
-		expect(second.effect).toBe("deny");
-		expect(first.message).toContain("Continue with a narrower or lower-risk action");
-		expect(second.message).toBe(first.message);
+	test("an uncertain judgment leaves the ask to the human, logs it, and is audited", async () => {
+		const h = harness({ judge: { judge: async () => decide({ ...ANSWERS, destroys_data: 0.5 }) } });
+		const pending = event();
+		await h.evaluate(pending);
+		expect(pending.effect).toBe("ask");
+		expect(pending.message).toBeUndefined();
+		expect(h.logs).toEqual([
+			"jev-auto-mode: JEV uncertain: destroys data version control cannot restore (estimated harm: 50%; allowance: 35%); leaving the ask to the human",
+		]);
+		expect(h.audit.length).toBe(1);
+		expect((h.audit[0].value as { verdict: string }).verdict).toBe("ask");
 	});
 
 	test("a session context read failure degrades to judging the call alone", async () => {

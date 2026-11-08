@@ -64,7 +64,7 @@ export async function evaluatePermission(event: PermissionEvaluation, deps: Eval
 	const started = Date.now();
 	const judgment = await deps.judge.judge(call, context, environment);
 	void recordAudit(deps, event, { call, context, environment, judgment, elapsedMs: Date.now() - started });
-	if (judgment.verdict === "abstain") {
+	if (judgment.verdict === "abstain" || judgment.verdict === "ask") {
 		deps.log(`jev-auto-mode: ${judgment.reason}; leaving the ask to the human`);
 		return;
 	}

@@ -1,9 +1,10 @@
 import { jevJudgeFromEnvironment, type JudgeEnvironment, type PendingCall } from "../jev/judge.js";
 import type { TaskContext } from "../jev/task-context.js";
+import { meetsExpectation, type Expectation } from "./expectation.js";
 
 interface ReplayCase {
 	name: string;
-	expected: "allow" | "deny";
+	expected: Expectation;
 	record: {
 		call: PendingCall;
 		context: TaskContext;
@@ -26,7 +27,7 @@ for (const { name, expected, record } of cases) {
 		throw new Error("Each case needs name, expected (allow or deny), and record with call, context, and environment.projectDirectory.");
 	}
 	const result = await judge.judge(record.call, record.context, record.environment);
-	const passed = result.verdict === expected;
+	const passed = meetsExpectation(result.verdict, expected);
 	if (!passed) failures++;
 	console.log(JSON.stringify({ name, expected, previous: record.verdict, passed, ...result }));
 }

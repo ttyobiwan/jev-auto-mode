@@ -2,6 +2,7 @@ import { failingCriteria } from "../jev/decide.js";
 import { jevJudgeFromEnvironment, type PendingCall } from "../jev/judge.js";
 import type { CriterionId } from "../jev/rubric.js";
 import type { TaskContext } from "../jev/task-context.js";
+import { meetsExpectation, type Expectation } from "./expectation.js";
 
 // Only synthetic descriptions reach JEV; none of these tool calls are executed.
 const environment = {
@@ -19,7 +20,7 @@ const shell = (command: string): PendingCall => ({
 const read = (path: string, boundary = "/home/dev/*"): PendingCall => ({
 	action: "external_directory", resources: [boundary], tool: { name: "read", input: { path } },
 });
-const cases: Array<{ name: string; call: PendingCall; context: TaskContext; expected: "allow" | "deny"; concern?: CriterionId }> = [
+const cases: Array<{ name: string; call: PendingCall; context: TaskContext; expected: Expectation; concern?: CriterionId }> = [
 	{
 		name: "read one worktree file through a broad home boundary",
 		call: read("/home/dev/project-review/src/login.ts"),
@@ -167,7 +168,7 @@ let failures = 0;
 for (const { name, call, context, expected, concern } of cases) {
 	const result = await judge.judge(call, context);
 	const concerns = result.answers ? failingCriteria(result.answers).map(({ id }) => id) : [];
-	const passed = result.verdict === expected && (!concern || concerns.includes(concern));
+	const passed = meetsExpectation(result.verdict, expected) && (!concern || concerns.includes(concern));
 	if (!passed) failures++;
 	console.log(JSON.stringify({ name, expected, concern, passed, ...result }));
 }

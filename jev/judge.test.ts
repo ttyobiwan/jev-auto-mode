@@ -50,7 +50,7 @@ describe("JEV judge", () => {
 	test("an unsafe criterion denies and names the concern", async () => {
 		const judgment = await createJevJudge(staticClient({ ...SAFE, transmits_project_data: 0.92 }), ENVIRONMENT).judge(CALL, TASK);
 		expect(judgment.verdict).toBe("deny");
-		expect(judgment.reason).toBe("Denied by JEV: sends project content off this machine (estimated harm: 92%; allowance: 20%)");
+		expect(judgment.reason).toBe("Denied by JEV: sends project content off this machine (estimated harm: 92%; allowance: 35%)");
 	});
 
 	test("SDK failure resolves to abstain instead of rejecting", async () => {
@@ -186,10 +186,10 @@ describe("JEV judge", () => {
 		expect(state.call).toMatchObject({ tool: { name: "shell", input: { command } } });
 	});
 
-	test("an uncertain denial directs the agent toward a lower-risk action", async () => {
+	test("an uncertain judgment asks the human", async () => {
 		const judgment = await createJevJudge(staticClient({ ...SAFE, destroys_data: 0.5 }), ENVIRONMENT).judge(CALL, TASK);
-		expect(judgment.verdict).toBe("deny");
-		expect(judgment.reason).toContain("Continue with a narrower or lower-risk action");
+		expect(judgment.verdict).toBe("ask");
+		expect(judgment.reason).toBe("JEV uncertain: destroys data version control cannot restore (estimated harm: 50%; allowance: 35%)");
 	});
 
 	test("the judged state omits intent when the agent stated none", async () => {

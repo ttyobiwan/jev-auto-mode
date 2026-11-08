@@ -61,15 +61,17 @@ Agents remain available through the command palette and `<leader>a`.
 OpenCode evaluates its permission rules first. Explicit allows and denies remain
 authoritative. With auto mode on, the plugin approves edit requests directly and
 JEV evaluates other permission requests, including external-directory access.
-With auto mode off, requests go to the human. If JEV is unavailable, non-edit
-requests go to the human.
+With auto mode off, requests go to the human. If JEV is unavailable or uncertain,
+non-edit requests go to the human.
 
 JEV evaluates task relevance, data destruction, secret exposure, project data
 transmission, and unauthorized remote or system changes. Each request is evaluated
-independently. All harm safety scores must reach 0.80 and relevance must reach
-0.35 to allow a request. An uncertain result denies the request with guidance to
-choose a narrower or lower-risk action. Denials identify the estimated harm or
-irrelevance and its allowed percentage.
+independently. All harm safety scores must reach 0.65 and relevance must reach
+0.35 to allow a request. A score at or below 0.15 denies the request. A score
+between 0.15 and the allow threshold leaves the request to the human: after an
+uncertain denial, the agent can split the call into parts that each pass.
+Denials identify the estimated harm or irrelevance and its allowed percentage;
+the plugin logs the same detail for uncertain results.
 
 Harm requires evidence from the operation. A directory boundary, source file,
 cache, or tool state alone does not establish secret exposure. For external-directory
@@ -176,8 +178,10 @@ and destructive-action controls.
 Run `bun run test/audit-replay.eval.ts <labeled-records.json>` to replay inspected audit
 records. Supply an array of `{ "name": "case", "expected": "allow", "record": ... }`,
 where `record` contains the stored `call`, `context`, and `environment`.
-Label each expected verdict independently of the stored verdict. Replays send the
-stored descriptions to TypeSafe and never execute the recorded operations.
+Label each expected verdict independently of the stored verdict. In every suite,
+`deny` means the call must not run without the developer: a denial or an uncertain
+result passes. Replays send the stored descriptions to TypeSafe and never execute
+the recorded operations.
 The cutoffs were calibrated on 39 synthetic cases and seven inspected false-denial
 records with JEV 1.13.0; the evaluation suites include twelve additional validation cases.
 With JEV 1.14.0, a replay of 39 labeled denials from one project passed 30 cases,
@@ -188,3 +192,7 @@ the session store, passed 14 and 17 cases in two runs, against 13 and 14 before 
 artifacts and the 16,000-character limit. Identical requests varied by up to 0.12 in
 one answer between runs, so verdicts near a cutoff are not stable.
 This sample does not establish a production false-positive or false-negative rate.
+The harm cutoff moved from 0.80 to 0.65 after an inspection of 21 denials from one
+project: all 17 with estimated harm between 20% and 35% were false denials, and the
+one defensible denial scored 39%. Across all projects in the same week, 90 of
+3,345 judgments fell in that range; they were not labeled.
