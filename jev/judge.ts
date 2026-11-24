@@ -54,7 +54,7 @@ export function createJevJudge(client: SystemOneClient, defaultEnvironment: Judg
 				...(context.rootTask ? { rootTask: context.rootTask } : {}),
 				...(context.intent ? { intent: context.intent } : {}),
 				...(context.dialogue?.length ? { dialogue: context.dialogue } : {}),
-				call: bounded(call, CALL_STRING_LIMIT),
+				call: bounded(judgedCall(call), CALL_STRING_LIMIT),
 				project: { directory: environment.projectDirectory },
 				environment: {
 					...(environment.sessionDirectory ? { sessionDirectory: environment.sessionDirectory } : {}),
@@ -75,6 +75,16 @@ export function createJevJudge(client: SystemOneClient, defaultEnvironment: Judg
 			}
 		},
 	};
+}
+
+/**
+ * The call as JEV judges it. A shell call's resources list each pipeline stage and command substitution
+ * as a separate command, which reads as if `gh auth token` printed its output; the command keeps the data flow.
+ */
+function judgedCall(call: PendingCall): Omit<PendingCall, "resources"> {
+	if (call.action !== "shell" || typeof call.tool?.input.command !== "string") return call;
+	const { resources: _, ...judged } = call;
+	return judged;
 }
 
 /** Every criterion's probability, or an error naming the first missing one. */

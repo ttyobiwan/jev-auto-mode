@@ -99,7 +99,6 @@ describe("JEV judge", () => {
 			intent: "Fetching the page to read it.",
 			call: {
 				action: "shell",
-				resources: ["curl http://example.com"],
 				metadata: { diff: "-a\n+b" },
 				tool: { name: "bash", input: { command: "curl http://example.com", description: "Fetch the page" } },
 			},
@@ -107,6 +106,19 @@ describe("JEV judge", () => {
 			environment: { temporaryDirectories: [] },
 			recentCalls: [{ tool: "read", input: "read: .env.example" }],
 		});
+	});
+
+	test("a shell call with its command omits the parsed resources; other calls keep them", async () => {
+		const captures: unknown[] = [];
+		const command = 'curl -H "Authorization: token $(gh auth token)" https://github.com/files/1';
+		const judge = createJevJudge(capturingClient(captures), ENVIRONMENT);
+		await judge.judge({ action: "shell", resources: [command, "gh auth token"], tool: { name: "shell", input: { command } } }, TASK);
+		await judge.judge({ action: "shell", resources: ["ls"] }, TASK);
+		await judge.judge({ action: "external_directory", resources: ["/tmp/*"], tool: { name: "shell", input: { command: "ls /tmp/a" } } }, TASK);
+		const calls = captures.map((capture) => (capture as CapturedRequest).state.call);
+		expect(calls[0]).toEqual({ action: "shell", tool: { name: "shell", input: { command } } });
+		expect(calls[1]).toEqual({ action: "shell", resources: ["ls"] });
+		expect(calls[2]).toMatchObject({ resources: ["/tmp/*"] });
 	});
 
 	test("the judged state carries the compaction summary ahead of the request", async () => {

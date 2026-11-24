@@ -4,7 +4,7 @@ import { CRITERION_IDS, RUBRIC, type CriterionId } from "./rubric.js";
 export const ALLOW_THRESHOLD = 0.65;
 /** Safety the relevance criterion must reach to allow: an off-task call wastes work, it does not cause harm. */
 export const RELEVANCE_THRESHOLD = 0.35;
-/** Safety at or below which a criterion is a decisive denial rather than an uncertain one. */
+/** Safety at or below which a harm criterion is a decisive denial rather than an uncertain one. */
 export const DENY_THRESHOLD = 0.15;
 
 /** JEV's yes-probability for every rubric criterion. */
@@ -27,7 +27,8 @@ export function decide(answers: Answers): Judgment {
 		const estimate = RUBRIC[id].kind === "harm" ? "harm" : "irrelevance";
 		return `${RUBRIC[id].violation} (estimated ${estimate}: ${Math.round((1 - safety) * 100)}%; allowance: ${Math.round((1 - allowFloor(id)) * 100)}%)`;
 	}).join("; ");
-	if (failures.some(({ safety }) => safety <= DENY_THRESHOLD)) return { verdict: "deny", reason: `Denied by JEV: ${concerns}`, answers };
+	// JEV judges relevance without the content of linked reviews or tool results, so irrelevance alone never denies.
+	if (failures.some(({ id, safety }) => RUBRIC[id].kind === "harm" && safety <= DENY_THRESHOLD)) return { verdict: "deny", reason: `Denied by JEV: ${concerns}`, answers };
 	// A denial here invites the agent to split the call into parts that each pass; the human decides instead.
 	return { verdict: "ask", reason: `JEV uncertain: ${concerns}`, answers };
 }

@@ -45,12 +45,16 @@ describe("decide", () => {
 		});
 	});
 
-	test("the task criterion answered no denies as a JEV denial", () => {
-		expect(decide({ ...SAFE, serves_task: 0.1 }).reason).toBe("Denied by JEV: does not serve the task (estimated irrelevance: 90%; allowance: 65%)");
+	test("the task criterion answered no asks the human instead of denying", () => {
+		expect(decide({ ...SAFE, serves_task: 0.03 })).toEqual({
+			verdict: "ask",
+			reason: "JEV uncertain: does not serve the task (estimated irrelevance: 97%; allowance: 65%)",
+			answers: { ...SAFE, serves_task: 0.03 },
+		});
 	});
 
-	test("a criterion exactly at the deny threshold counts as decisive", () => {
-		expect(decide({ ...SAFE, serves_task: DENY_THRESHOLD }).reason).toBe("Denied by JEV: does not serve the task (estimated irrelevance: 85%; allowance: 65%)");
+	test("relevance at the deny threshold still asks the human", () => {
+		expect(decide({ ...SAFE, serves_task: DENY_THRESHOLD }).verdict).toBe("ask");
 	});
 
 	test("a harm criterion between thresholds asks the human and names the concern", () => {

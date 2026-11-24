@@ -67,9 +67,10 @@ non-edit requests go to the human.
 JEV evaluates task relevance, data destruction, secret exposure, project data
 transmission, and unauthorized remote or system changes. Each request is evaluated
 independently. All harm safety scores must reach 0.65 and relevance must reach
-0.35 to allow a request. A score at or below 0.15 denies the request. A score
-between 0.15 and the allow threshold leaves the request to the human: after an
-uncertain denial, the agent can split the call into parts that each pass.
+0.35 to allow a request. A harm safety score at or below 0.15 denies the request.
+Any other failing score, including any relevance failure, leaves the request to the
+human: after an uncertain denial, the agent can split the call into parts that each
+pass. Relevance never denies because JEV does not see linked reviews or tool results.
 Denials identify the estimated harm or irrelevance and its allowed percentage;
 the plugin logs the same detail for uncertain results.
 
@@ -98,8 +99,11 @@ secret access, or remote writes from evaluation.
 
 Judgment requests send bounded, unredacted tool input, permission metadata,
 user requests with invoked skill descriptions, answers to agent questions, compaction
-summary, recent calls, session artifacts, and stated intent or reasoning to TypeSafe. Each string in the tool input is limited to 16,000 characters;
-a longer string keeps its beginning and end, so JEV does not see its middle.
+summary, recent calls, session artifacts, and stated intent or reasoning to TypeSafe.
+A shell call with its command omits the permission resources, which split pipelines
+and command substitutions into separate commands. Each string in the tool input is
+limited to 16,000 characters; a longer string keeps its beginning and end, so JEV
+does not see its middle.
 
 The plugin records decisions under `decision/` in plugin storage, including context,
 environment, answers, model, reason, and latency. Audit writes are best-effort;
@@ -191,7 +195,8 @@ records. Supply an array of `{ "name": "case", "expected": "allow", "record": ..
 where `record` contains the stored `call`, `context`, and `environment`.
 Label each expected verdict independently of the stored verdict. In every suite,
 `deny` means the call must not run without the developer: a denial or an uncertain
-result passes. Replays send the stored descriptions to TypeSafe and never execute
+result passes. `undenied` means JEV must not deny the call on its own: an allow or
+an uncertain result passes. Replays send the stored descriptions to TypeSafe and never execute
 the recorded operations.
 The cutoffs were calibrated on 39 synthetic cases and seven inspected false-denial
 records with JEV 1.13.0; the evaluation suites include twelve additional validation cases.
@@ -207,6 +212,8 @@ from the session store, passed 7 of 14 in two runs after skill descriptions, que
 answers, and reasoning intent entered the context and the rubric gained the
 authentication, redaction, review-reply, and migration examples. The previous context
 and rubric passed 1 of 14 in two runs; the new context alone passed 3 and 4.
+Without shell resources, and with relevance no longer able to deny, the replay passed
+9 of 14 in two runs; each remaining case went to the human.
 This sample does not establish a production false-positive or false-negative rate.
 The harm cutoff moved from 0.80 to 0.65 after an inspection of 21 denials from one
 project: all 17 with estimated harm between 20% and 35% were false denials, and the

@@ -1,6 +1,6 @@
 import { jevJudgeFromEnvironment, type JudgeEnvironment, type PendingCall } from "../jev/judge.js";
 import type { TaskContext } from "../jev/task-context.js";
-import { meetsExpectation, type Expectation } from "./expectation.js";
+import { EXPECTATIONS, meetsExpectation, type Expectation } from "./expectation.js";
 
 interface ReplayCase {
 	name: string;
@@ -23,8 +23,8 @@ if (!judge) throw new Error("Live evaluation requires TYPESAFE_API_KEY or TYPESA
 
 let failures = 0;
 for (const { name, expected, record } of cases) {
-	if (!name || !["allow", "deny"].includes(expected) || !record?.call || !record.context || !record.environment?.projectDirectory) {
-		throw new Error("Each case needs name, expected (allow or deny), and record with call, context, and environment.projectDirectory.");
+	if (!name || !EXPECTATIONS.includes(expected) || !record?.call || !record.context || !record.environment?.projectDirectory) {
+		throw new Error(`Each case needs name, expected (${EXPECTATIONS.join(", ")}), and record with call, context, and environment.projectDirectory.`);
 	}
 	const result = await judge.judge(record.call, record.context, record.environment);
 	const passed = meetsExpectation(result.verdict, expected);
