@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { taskContext, toolCall, type SessionMessage } from "./task-context.js";
-import { assistant, compaction, completedToolPart, failedToolPart, reasoningPart, textPart, toolPart, user } from "../test/fixtures.js";
+import { answeredQuestionPart, assistant, compaction, completedToolPart, failedToolPart, reasoningPart, textPart, toolPart, user, userWithSkills } from "../test/fixtures.js";
 
 describe("taskContext", () => {
 	test("combines ordered requests, summary, issuing intent, and recent calls", () => {
@@ -230,12 +230,66 @@ describe("taskContext", () => {
 		]);
 	});
 
-	test("uses the latest assistant text only when the issuing message is missing", () => {
+	test("uses the latest assistant message only when the issuing message is missing", () => {
 		const messages = [assistant(textPart("first")), user("go on"), assistant(textPart("latest"))];
 		expect(taskContext(messages, "missing").intent).toBe("latest");
 		expect(taskContext(messages, "").intent).toBe("latest");
-		messages.push(assistant(reasoningPart("thinking"), toolPart("pending", "shell", { command: "ls" })));
+		messages.push(assistant(toolPart("pending", "shell", { command: "ls" })));
 		expect(taskContext(messages, "pending").intent).toBeUndefined();
+	});
+
+	test("uses reasoning as intent when the issuing message has no public text", () => {
+		const messages = [assistant(reasoningPart("Checking the flag state in production."), toolPart("pending", "shell", { command: "query" }))];
+		const context = taskContext(messages, "pending");
+		expect(context.intent).toBe("Checking the flag state in production.");
+		expect(context).not.toHaveProperty("dialogue");
+	});
+
+	test("adds the description of each invoked skill to its request", () => {
+		const reply = "<skill_content name=\"pr-reply\">\n# Skill: pr-reply\n\n# Reply\n\nPost replies to PR review comments\nand reviews.\n\n## Posting\n\n- Reply in the thread.";
+		const context = taskContext([userWithSkills("@pr-reply", [{ name: "pr-reply", text: reply }, { name: "empty", text: "# Empty" }])], "pending");
+		expect(context.requests).toEqual(["@pr-reply\n\nInvoked skills:\n- pr-reply: Post replies to PR review comments and reviews.\n- empty"]);
+		expect(context.dialogue).toEqual([{ role: "user", text: "@pr-reply" }]);
+	});
+
+	test("adds the developer's answers to completed questions as requests in order", () => {
+		const question = {
+			question: "What do you want done with the two replies?",
+			options: [{ label: "Merge into one", description: "Edit the first reply and delete the second." }, { label: "Keep both", description: "Change nothing." }],
+		};
+		const context = taskContext([
+			user("Reply to the review threads."),
+			assistant(answeredQuestionPart("q1", [question, { question: "Which PR?" }], [["Merge into one"], ["both, keep it short"]])),
+			assistant(toolPart("pending", "shell", { command: "gh api -X DELETE repos/o/r/pulls/comments/2" })),
+		], "pending");
+		expect(context.requests).toEqual([
+			"Reply to the review threads.",
+			"Answer to the agent's question \"What do you want done with the two replies?\": Merge into one (Edit the first reply and delete the second.)\n" +
+				"Answer to the agent's question \"Which PR?\": both, keep it short",
+		]);
+	});
+
+	test("ignores unanswered, failed, and malformed questions", () => {
+		const question = { question: "Proceed?" };
+		const context = taskContext([
+			user("Fix it."),
+			assistant(
+				toolPart("running", "question", { questions: [question] }),
+				failedToolPart("failed", "question", { questions: [question] }),
+				answeredQuestionPart("empty", [question], [[""]]),
+				answeredQuestionPart("malformed", "Proceed?", [["yes"]]),
+				completedToolPart("other", "shell", { command: "ls" }),
+			),
+		], "pending");
+		expect(context.requests).toEqual(["Fix it."]);
+	});
+
+	test("root context retains the developer's answers to root questions", () => {
+		const root = [user("Clean up the review."), assistant(answeredQuestionPart("q", [{ question: "Delete the duplicate comment?" }], [["yes"]]))];
+		expect(taskContext([user("Delete the comment.")], "pending", root).rootTask?.requests).toEqual([
+			"Clean up the review.",
+			"Answer to the agent's question \"Delete the duplicate comment?\": yes",
+		]);
 	});
 
 	test("lists files that completed calls wrote, with content only for files the pending call references", () => {
@@ -305,7 +359,7 @@ describe("taskContext", () => {
 		expect(taskContext([assistant(completedToolPart("a", "read", { path: "/etc/hosts" }), toolPart("pending", "shell", { command: "ls" }))], "pending")).not.toHaveProperty("artifacts");
 	});
 
-	test("joins text parts without forwarding reasoning", () => {
+	test("prefers joined text parts over reasoning for intent", () => {
 		const messages = [assistant(reasoningPart("private reasoning"), textPart("part one"), textPart("  part two "), toolPart("pending", "shell", { command: "ls" }))];
 		expect(taskContext(messages, "pending").intent).toBe("part one\npart two");
 	});

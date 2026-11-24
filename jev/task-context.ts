@@ -2,8 +2,13 @@ import type { Plugin } from "@opencode/plugin";
 
 export type SessionMessage = Awaited<ReturnType<Plugin.Context["session"]["context"]>>[number];
 type AssistantMessage = Extract<SessionMessage, { type: "assistant" }>;
+type UserMessage = Extract<SessionMessage, { type: "user" }>;
+type AssistantPart = AssistantMessage["content"][number];
+type ToolPart = Extract<AssistantPart, { type: "tool" }>;
+type CompletedToolPart = ToolPart & { state: Extract<ToolPart["state"], { status: "completed" }> };
 
 const REQUEST_LIMIT = 2000;
+const SKILL_DESCRIPTION_LIMIT = 300;
 const REQUESTS_BUDGET = 4000;
 const REQUESTS_LIMIT = 10;
 const TRUNCATION_MARKER = "\n[truncated]\n";
@@ -64,10 +69,7 @@ export function taskContext(messages: readonly SessionMessage[], pendingCallId: 
 			dialogue.push({ role: message.type, text: truncateExcerpt(text, DIALOGUE_TEXT_LIMIT) });
 			if (dialogue.length > DIALOGUE_LIMIT) dialogue.shift();
 		}
-		if (message.type === "user" && message.text.trim()) {
-			context.requests.push(message.text.trim());
-			if (context.requests.length > REQUESTS_LIMIT) context.requests.splice(1, 1);
-		}
+		addRequests(context.requests, message);
 		if (message.type !== "assistant") continue;
 		latest = message;
 		for (const part of message.content) {
@@ -86,8 +88,8 @@ export function taskContext(messages: readonly SessionMessage[], pendingCallId: 
 	context.requests = boundedRequests(context.requests);
 	if (dialogue.length) context.dialogue = boundedDialogue(dialogue);
 	if (writes.size) context.artifacts = sessionArtifacts(writes, pendingInput);
-	const text = assistantText(issuing ?? latest);
-	if (text) context.intent = truncateLines(text, INTENT_LIMIT);
+	const intent = statedIntent(issuing ?? latest);
+	if (intent) context.intent = truncateLines(intent, INTENT_LIMIT);
 	return context;
 }
 
@@ -97,13 +99,62 @@ function taskRequests(messages: readonly SessionMessage[]): TaskRequests {
 		if (message.type === "compaction" && message.status === "completed" && message.summary.trim()) {
 			task.summary = truncateLines(message.summary.trim(), SUMMARY_LIMIT);
 		}
-		if (message.type === "user" && message.text.trim()) {
-			task.requests.push(message.text.trim());
-			if (task.requests.length > REQUESTS_LIMIT) task.requests.splice(1, 1);
-		}
+		addRequests(task.requests, message);
 	}
 	task.requests = boundedRequests(task.requests);
 	return task;
+}
+
+/** Appends the developer's requests in a message, keeping the first request and the latest ones. */
+function addRequests(requests: string[], message: SessionMessage): void {
+	const added = message.type === "user" ? [userRequest(message)] : message.type === "assistant" ? questionAnswers(message) : [];
+	for (const request of added) {
+		if (!request) continue;
+		requests.push(request);
+		if (requests.length > REQUESTS_LIMIT) requests.splice(1, 1);
+	}
+}
+
+/** The message text followed by the description of each skill it invokes. */
+function userRequest(message: UserMessage): string {
+	const skills = (message.skills ?? []).map((skill) => {
+		const description = skillDescription(skill.text ?? "");
+		return description ? `- ${skill.name}: ${description}` : `- ${skill.name}`;
+	});
+	const text = message.text.trim();
+	if (!skills.length) return text;
+	return [text, `Invoked skills:\n${skills.join("\n")}`].filter(Boolean).join("\n\n");
+}
+
+/** The first paragraph of a skill body, after its wrapper tag and headings. */
+function skillDescription(text: string): string {
+	const paragraph = text.split(/\n\s*\n/).map((block) => block.trim()).find((block) => block && !block.startsWith("<") && !block.startsWith("#"));
+	return paragraph ? truncateLines(paragraph.replace(/\s+/g, " "), SKILL_DESCRIPTION_LIMIT) : "";
+}
+
+/** The developer's answers to completed question calls, one request per call. */
+function questionAnswers(message: AssistantMessage): string[] {
+	return message.content
+		.filter((part): part is CompletedToolPart => part.type === "tool" && part.name === "question" && part.state.status === "completed")
+		.map(({ state }) => {
+			const questions: unknown[] = Array.isArray(state.input.questions) ? state.input.questions : [];
+			const answers: unknown[] = Array.isArray(state.metadata?.answers) ? state.metadata.answers : [];
+			return questions.map((question, index) => questionAnswer(question, answers[index])).filter(Boolean).join("\n");
+		});
+}
+
+function questionAnswer(question: unknown, answer: unknown): string | undefined {
+	if (!isRecord(question) || typeof question.question !== "string" || !Array.isArray(answer)) return undefined;
+	const options = Array.isArray(question.options) ? question.options.filter(isRecord) : [];
+	const chosen = answer.filter((value): value is string => typeof value === "string" && value.trim() !== "").map((value) => {
+		const description = options.find((option) => option.label === value)?.description;
+		return typeof description === "string" && description ? `${value} (${description})` : value;
+	});
+	return chosen.length ? `Answer to the agent's question "${question.question}": ${chosen.join("; ")}` : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Records the files a completed file-tool call wrote; content is known for full writes and edits of known content. */
@@ -182,8 +233,17 @@ function stringValues(value: unknown): string[] {
 }
 
 function assistantText(message: AssistantMessage | undefined): string {
+	return partText(message, "text");
+}
+
+/** The public text of the message, or its reasoning when the message has no public text. */
+function statedIntent(message: AssistantMessage | undefined): string {
+	return partText(message, "text") || partText(message, "reasoning");
+}
+
+function partText(message: AssistantMessage | undefined, type: "text" | "reasoning"): string {
 	return message?.content
-		.filter((part) => part.type === "text")
+		.filter((part): part is Extract<AssistantPart, { type: "text" | "reasoning" }> => part.type === type)
 		.map((part) => part.text.trim())
 		.filter(Boolean)
 		.join("\n") ?? "";
