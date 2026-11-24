@@ -294,14 +294,14 @@ describe("taskContext", () => {
 
 	test("lists files that completed calls wrote, with content only for files the pending call references", () => {
 		const messages = [assistant(
-			completedToolPart("a", "write", { path: "/tmp/review/seed.py", content: "Venue.objects.create(name='Rebet')" }),
+			completedToolPart("a", "write", { path: "/tmp/review/seed.py", content: "Order.objects.create(number=1)" }),
 			completedToolPart("b", "write", { path: "/tmp/review/notes.md", content: "# Notes" }),
 			failedToolPart("c", "write", { path: "/tmp/review/denied.py", content: "drop()" }),
 			toolPart("d", "write", { path: "/tmp/review/running.py", content: "pending()" }),
-			toolPart("pending", "shell", { command: "cd ../website && uv run python manage.py shell < /tmp/review/seed.py" }),
+			toolPart("pending", "shell", { command: "cd ../shop && uv run python manage.py shell < /tmp/review/seed.py" }),
 		)];
 		expect(taskContext(messages, "pending").artifacts).toEqual([
-			{ path: "/tmp/review/seed.py", content: "Venue.objects.create(name='Rebet')" },
+			{ path: "/tmp/review/seed.py", content: "Order.objects.create(number=1)" },
 			{ path: "/tmp/review/notes.md" },
 		]);
 	});
